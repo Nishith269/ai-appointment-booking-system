@@ -1,0 +1,11 @@
+langchain
+langgraph
+langchain-core
+langchain-google-genai
+openai
+python-dotenv
+pydantic
+ipython
+fastapi
+streamlit
+uvicorn
