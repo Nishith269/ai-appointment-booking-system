@@ -26,7 +26,7 @@ Frontend (Streamlit) → FastAPI Backend → LangGraph Agent → Tools
 - LangGraph
 - FastAPI
 - Streamlit
-- Google Gemini API
+- Azure OpenAI API
 
 ---
 
