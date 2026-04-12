@@ -1,31 +1,41 @@
 import datetime
 from langchain_core.tools import tool
 
-# In-memory storage for appointments
-# NOTE: This can be replaced with a real database later (MongoDB/PostgreSQL)
-APPOINTMENTS = []
+from database import SessionLocal
+from models import Appointment
 
+
+# ---------------- GET NEXT AVAILABLE ----------------
 @tool
 def get_next_appointment():
     """Returns the next available UNBOOKED 30-min slot"""
-    import datetime
 
-    now = datetime.datetime.now()
+    db = SessionLocal()
+    try:
+        now = datetime.datetime.now()
 
-    # Round to next 30-min slot
-    minutes = (30 - now.minute % 30) % 30
-    if minutes == 0:
-        minutes = 30
+        # Round to next 30-min slot
+        minutes = (30 - now.minute % 30) % 30
+        if minutes == 0:
+            minutes = 30
 
-    next_slot = now + datetime.timedelta(minutes=minutes)
-    next_slot = next_slot.replace(second=0, microsecond=0)
+        next_slot = now + datetime.timedelta(minutes=minutes)
+        next_slot = next_slot.replace(second=0, microsecond=0)
 
-    # Loop until we find unbooked slot
-    while any(appointment["time"] == next_slot for appointment in APPOINTMENTS):
-        next_slot += datetime.timedelta(minutes=30)
+        # Find next unbooked slot
+        while True:
+            exists = db.query(Appointment).filter(Appointment.time == next_slot).first()
+            if not exists:
+                break
+            next_slot += datetime.timedelta(minutes=30)
 
-    return f"The next available appointment is at {next_slot}"
+        return f"The next available appointment is at {next_slot}"
 
+    finally:
+        db.close()
+
+
+# ---------------- BOOK ----------------
 @tool
 def book_appointment(
     year: int = None,
@@ -35,87 +45,111 @@ def book_appointment(
     minute: int = None,
     client_name: str = None
 ):
-    """
-    Books an appointment if the slot is available, Requires all fields.
+    """Books an appointment if slot is available."""
 
-    Args:
-        year, month, day, hour, minute → appointment time
-        client_name → name of the user 
+    db = SessionLocal()
+    try:
+        if not client_name:
+            return "Please provide your name to book the appointment."
 
-    """
+        if not all([year, month, day]):
+            return "Please provide the date for the appointment."
 
-    import datetime
+        if hour is None or minute is None:
+            return "Please provide the time (30-minute slots only)."
 
-    # ❌ Missing fields → ask user
-    if not client_name:
-        return "Please provide your name to book the appointment."
+        time = datetime.datetime(year, month, day, hour, minute)
+        now = datetime.datetime.now()
 
-    if not all([year, month, day]):
-        return "Please provide the date for the appointment."
+        if time < now:
+            return "You cannot book an appointment in the past."
 
-    if hour is None or minute is None:
-        return "Please provide the time for the appointment (30-minute slots only)."
+        if minute not in [0, 30]:
+            return "Appointments must be in 30-min slots."
 
-    time = datetime.datetime(year, month, day, hour, minute)
-    now = datetime.datetime.now()
-
-    # ❌ Past booking
-    if time < now:
-        return "You cannot book an appointment in the past. Please choose a future time."
-
-    # ❌ Enforce 30-min slots
-    if minute not in [0, 30]:
-        return "Appointments can only be booked at 30-minute intervals (e.g., 11:00, 11:30)."
-
-    # ❌ Conflict check
-    for appointment in APPOINTMENTS:
-        if appointment["time"] == time:
+        existing = db.query(Appointment).filter(Appointment.time == time).first()
+        if existing:
             return f"Appointment at {time} is already booked"
 
-    APPOINTMENTS.append({"time": time, "name": client_name})
-    return f"Appointment successfully booked for {time}"
+        new_appointment = Appointment(client_name=client_name, time=time)
+        db.add(new_appointment)
+        db.commit()
+
+        return f"Appointment successfully booked for {time}"
+
+    finally:
+        db.close()
 
 
+# ---------------- CANCEL ----------------
 @tool
-def cancel_appointment(index: int = None, year: int = None, month: int = None, day: int = None, hour: int = None, minute: int = None):
-    """Cancel appointment by index OR by datetime."""
+def cancel_appointment(
+    index: int = None,
+    year: int = None,
+    month: int = None,
+    day: int = None,
+    hour: int = None,
+    minute: int = None
+):
+    """Cancel appointment by index OR datetime"""
 
-    import datetime
+    db = SessionLocal()
+    try:
+        appointments = db.query(Appointment).order_by(Appointment.time).all()
 
-    # ✅ Cancel by index
-    if index is not None:
-        if index < 1 or index > len(APPOINTMENTS):
-            return "Invalid selection."
-
-        removed = APPOINTMENTS.pop(index - 1)
-        return f"Cancelled {removed['name']} at {removed['time']}"
-
-    # Existing logic (datetime-based)
-    if not all([year, month, day, hour, minute]):
-        if not APPOINTMENTS:
+        if not appointments:
             return "There are no appointments to cancel."
 
-        return "Please select which appointment to cancel:\n" + "\n".join(
-            [f"{i+1}. {appt['name']} at {appt['time']}" for i, appt in enumerate(APPOINTMENTS)]
-        )
+        # Cancel by index
+        if index is not None:
+            if index < 1 or index > len(appointments):
+                return "Invalid selection."
 
-    time = datetime.datetime(year, month, day, hour, minute)
+            appt = appointments[index - 1]
+            db.delete(appt)
+            db.commit()
 
-    for appointment in APPOINTMENTS:
-        if appointment["time"] == time:
-            APPOINTMENTS.remove(appointment)
-            return f"Appointment at {time} cancelled"
+            return f"Cancelled {appt.client_name} at {appt.time}"
 
-    return "No matching appointment found."
+        # If missing → show options
+        if not all([year, month, day, hour, minute]):
+            return "Please select which appointment to cancel:\n" + "\n".join(
+                [f"{i+1}. {a.client_name} at {a.time}" for i, a in enumerate(appointments)]
+            )
+
+        # Cancel by datetime
+        time = datetime.datetime(year, month, day, hour, minute)
+
+        appt = db.query(Appointment).filter(Appointment.time == time).first()
+
+        if not appt:
+            return "No matching appointment found."
+
+        db.delete(appt)
+        db.commit()
+
+        return f"Appointment at {time} cancelled"
+
+    finally:
+        db.close()
 
 
+# ---------------- LIST ----------------
 @tool
 def list_appointments():
     """Displays all booked appointments."""
-    if not APPOINTMENTS:
-        return "There are no appointments scheduled."
 
-    return "\n".join([
-        f"{i+1}. {appointment['name']} at {appointment['time']}"
-        for i, appointment in enumerate(APPOINTMENTS)
-    ])
+    db = SessionLocal()
+    try:
+        appointments = db.query(Appointment).order_by(Appointment.time).all()
+
+        if not appointments:
+            return "There are no appointments scheduled."
+
+        return "\n".join([
+            f"{i+1}. {a.client_name} at {a.time}"
+            for i, a in enumerate(appointments)
+        ])
+
+    finally:
+        db.close()

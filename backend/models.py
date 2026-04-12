@@ -1,5 +1,9 @@
-from pydantic import BaseModel
+from sqlalchemy import Column, Integer, String, DateTime
+from database import Base
 
-class AskHuman(BaseModel):
-    """Ask the human a question"""
-    question: str
+class Appointment(Base):
+    __tablename__ = "appointments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    client_name = Column(String, nullable=False)
+    time = Column(DateTime, nullable=False)

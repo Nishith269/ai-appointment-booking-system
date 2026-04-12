@@ -1,6 +1,10 @@
 import streamlit as st
 import requests
 from datetime import datetime, date, time
+import uuid
+
+if "thread_id" not in st.session_state:
+    st.session_state.thread_id = str(uuid.uuid4())
 
 API_URL = "http://127.0.0.1:8000/chat"
 
@@ -18,14 +22,17 @@ if "chat_history" not in st.session_state:
 # Function to call backend
 # -----------------------------
 def send_query(query):
-    res = requests.post(API_URL, json={"message": query, "thread_id": "1"})
+    res = requests.post(API_URL, json={
+        "message": query,
+        "thread_id": st.session_state.get("thread_id", "1")
+    })
     return res.json()["response"]
 
 
 def get_booked_slots():
     res = requests.post(API_URL, json={
         "message": "List all appointments",
-        "thread_id": "1"
+        "thread_id": st.session_state.get("thread_id")
     })
 
     text = res.json().get("response", "")
@@ -39,6 +46,29 @@ def get_booked_slots():
 
     return booked
 
+def book_direct(date, time, name):
+    res = requests.post("http://127.0.0.1:8000/book", json={
+        "date": str(date),
+        "time": str(time),
+        "name": name
+    })
+    return res.json()["response"]
+
+def cancel_direct(date, time):
+    res = requests.post("http://127.0.0.1:8000/cancel", json={
+        "date": str(date),
+        "time": str(time)
+    })
+    return res.json()["response"]
+
+def list_direct():
+    res = requests.post("http://127.0.0.1:8000/list")
+    return res.json()["response"]
+
+def next_direct():
+    res = requests.post("http://127.0.0.1:8000/next")
+    return res.json()["response"]
+
 # -----------------------------
 # Tabs
 # -----------------------------
@@ -48,7 +78,9 @@ tab1, tab2 = st.tabs(["💬 Chat", "⚙️ Actions"])
 # CHAT TAB
 # -----------------------------
 with tab1:
-    user_input = st.text_input("Ask anything about appointments")
+    st.subheader("💬 Chat with AI")
+
+    user_input = st.text_input("Type your message")
 
     if st.button("Send"):
         if user_input:
@@ -57,12 +89,9 @@ with tab1:
             st.session_state.chat_history.append(("You", user_input))
             st.session_state.chat_history.append(("Bot", response))
 
-    # Display chat history
     for role, msg in st.session_state.chat_history:
-        if role == "You":
-            st.markdown(f"**🧑 You:** {msg}")
-        else:
-            st.markdown(f"**🤖 Bot:** {msg}")
+        with st.chat_message("user" if role == "You" else "assistant"):
+            st.write(msg)
 
 # -----------------------------
 # ACTION TAB
@@ -85,61 +114,46 @@ with tab2:
             min_value=date.today()
         )
 
-        now = datetime.now()
-        time_options = []
+        selected_time = None
 
         if selected_date is not None:
             now = datetime.now()
-
-            # Get booked slots
             booked_slots = get_booked_slots()
+
+            time_options = []
 
             for hour in range(24):
                 for minute in (0, 30):
-                    slot = datetime.combine(
-                        selected_date,
-                        time(hour, minute)
-                    )
+                    slot = datetime.combine(selected_date, time(hour, minute))
 
-                    # Only future slots
                     if slot <= now:
                         continue
 
-                    # Remove booked slots
                     if any(abs((slot - b).total_seconds()) < 60 for b in booked_slots):
                         continue
 
                     time_options.append(time(hour, minute))
 
+            if not time_options:
+                st.error("❌ No available slots for this day.")
+            else:
+                selected_time = st.selectbox(
+                    "Select time",
+                    ["-- Select Time --"] + time_options
+                )
 
-        
-        if selected_date is None:
-            st.warning("Please select a date first")
-            time = None
-
-        # 🚫 No slots left for the day
-        elif not time_options:
-            st.error("❌ No available slots for this day. Please select another date.")
-            time = None
-
-        else:
-            time = st.selectbox("Select time", ["-- Select Time --"] + time_options)
-
-        # Booking button
-        
         if st.button("Confirm Booking"):
             if not name:
                 st.warning("Please enter your name")
             elif selected_date is None:
                 st.warning("Please select a date")
-            elif time == "-- Select Time --":
+            elif selected_time == "-- Select Time --" or selected_time is None:
                 st.warning("Please select a time")
             else:
-                query = f"Book an appointment for {name} on {selected_date} at {time}"
-                response = send_query(query)
+                response = book_direct(selected_date, selected_time, name)
                 st.success(response)
 
-# ---------------- CANCEL ----------------
+    # ---------------- CANCEL ----------------
     elif action == "Cancel Appointment":
         st.info("Please select the date and time of the appointment you want to cancel.")
 
@@ -180,9 +194,7 @@ with tab2:
             with col1:
                 if st.button("Yes, Cancel"):
                     date_val, time_val = st.session_state.cancel_payload
-
-                    query = f"CONFIRMED: Cancel appointment on {date_val} at {time_val}"
-                    response = send_query(query)
+                    response = cancel_direct(date_val, time_val)
 
                     st.success(response)
 
@@ -198,11 +210,11 @@ with tab2:
     # ---------------- NEXT SLOT ----------------
     elif action == "Next Available Slot":
         if st.button("Get Next Slot"):
-            response = send_query("What is the next available appointment?")
+            response = next_direct()
             st.info(response)
 
     # ---------------- LIST ----------------
     elif action == "List Appointments":
         if st.button("Show Appointments"):
-            response = send_query("List all appointments")
+            response = list_direct()
             st.write(response)
