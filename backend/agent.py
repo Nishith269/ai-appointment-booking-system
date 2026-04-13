@@ -1,6 +1,7 @@
 import os
 import datetime
 from dotenv import load_dotenv
+import logging
 
 
 # LLM
@@ -23,6 +24,7 @@ from tools import (
     cancel_appointment,
 )
 
+logger = logging.getLogger("appointment_app")
 
 # 🔐 Load environment variables
 
@@ -142,11 +144,14 @@ def chatbot(state: MessagesState):
     - Invokes LLM with tools
     - Returns updated messages
     """
-    state["current_time"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-
-    response = caller_model.invoke(state)
-
-    return {"messages": [response]}
+    try:
+        state["current_time"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+        response = caller_model.invoke(state)
+        logger.info("LLM responded")
+        return {"messages": [response]}
+    except Exception as e:
+        logger.error(f"Agent error: {str(e)}", exc_info=True)
+        raise
 
 
 
@@ -159,19 +164,22 @@ def router(state: MessagesState):
     - Mutating → action2 (skipping human approval for API)
     """
 
-    messages = state["messages"]
-    tool_calls = messages[-1].tool_calls
+    try:
+        messages = state["messages"]
+        tool_calls = messages[-1].tool_calls
 
-    if tool_calls:
-        tool_name = tool_calls[0]["name"]
+        if tool_calls:
+            tool_name = tool_calls[0]["name"]
 
-        if tool_name in ["get_next_appointment", "list_appointments"]:
-            return "action1"
+            if tool_name in ["get_next_appointment", "list_appointments"]:
+                return "action1"
+            elif tool_name in ["book_appointment", "cancel_appointment"]:
+                return "action2"
 
-        elif tool_name in ["book_appointment", "cancel_appointment"]:
-            return "action2"
-
-    return "end"
+        return "end"
+    except Exception as e:
+        logger.error(f"Router error: {str(e)}", exc_info=True)
+        return "end"
 
 
 

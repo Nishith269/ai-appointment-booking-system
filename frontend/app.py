@@ -3,71 +3,80 @@ import requests
 from datetime import datetime, date, time
 import uuid
 
+# -----------------------------
+# Session Setup
+# -----------------------------
 if "thread_id" not in st.session_state:
     st.session_state.thread_id = str(uuid.uuid4())
 
-API_URL = "http://127.0.0.1:8000/chat"
-
-st.set_page_config(page_title="AI Appointment Assistant", layout="centered")
-
-st.title("📅 AI Appointment Booking Assistant")
-
-# -----------------------------
-# Session state for chat history
-# -----------------------------
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
+API_BASE = "http://127.0.0.1:8000"
+
+st.set_page_config(page_title="AI Appointment Assistant", layout="centered")
+st.title("📅 AI Appointment Booking Assistant")
+
 # -----------------------------
-# Function to call backend
+# Safe API Call
+# -----------------------------
+def safe_post(url, payload=None):
+    try:
+        res = requests.post(url, json=payload)
+
+        if res.status_code != 200:
+            st.error(f"API Error: {res.status_code}")
+            return None
+
+        return res.json()
+
+    except Exception as e:
+        st.error(f"Request failed: {str(e)}")
+        return None
+
+
+# -----------------------------
+# Chat API
 # -----------------------------
 def send_query(query):
-    res = requests.post(API_URL, json={
+    data = safe_post(f"{API_BASE}/chat", {
         "message": query,
-        "thread_id": st.session_state.get("thread_id", "1")
-    })
-    return res.json()["response"]
-
-
-def get_booked_slots():
-    res = requests.post(API_URL, json={
-        "message": "List all appointments",
-        "thread_id": st.session_state.get("thread_id")
+        "thread_id": st.session_state.thread_id
     })
 
-    text = res.json().get("response", "")
+    if data:
+        return data.get("response", "No response")
+    return "Error occurred"
 
-    # Extract datetime from response (basic parsing)
-    import re
-    matches = re.findall(r'\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}', text)
 
-    import datetime
-    booked = [datetime.datetime.strptime(m, "%Y-%m-%d %H:%M:%S") for m in matches]
-
-    return booked
-
-def book_direct(date, time, name):
-    res = requests.post("http://127.0.0.1:8000/book", json={
-        "date": str(date),
-        "time": str(time),
+# -----------------------------
+# Direct APIs
+# -----------------------------
+def book_direct(date_val, time_val, name):
+    data = safe_post(f"{API_BASE}/book", {
+        "date": str(date_val),
+        "time": str(time_val),
         "name": name
     })
-    return res.json()["response"]
+    return data.get("response", "Error") if data else "Error"
 
-def cancel_direct(date, time):
-    res = requests.post("http://127.0.0.1:8000/cancel", json={
-        "date": str(date),
-        "time": str(time)
+
+def cancel_direct_by_id(appt_id):
+    data = safe_post(f"{API_BASE}/cancel", {
+        "id": appt_id
     })
-    return res.json()["response"]
+    return data.get("response", "Error") if data else "Error"
+
 
 def list_direct():
-    res = requests.post("http://127.0.0.1:8000/list")
-    return res.json()["response"]
+    data = safe_post(f"{API_BASE}/list")
+    return data.get("appointments", []) if data else []
+
 
 def next_direct():
-    res = requests.post("http://127.0.0.1:8000/next")
-    return res.json()["response"]
+    data = safe_post(f"{API_BASE}/next")
+    return data.get("response", "Error") if data else "Error"
+
 
 # -----------------------------
 # Tabs
@@ -93,6 +102,7 @@ with tab1:
         with st.chat_message("user" if role == "You" else "assistant"):
             st.write(msg)
 
+
 # -----------------------------
 # ACTION TAB
 # -----------------------------
@@ -106,10 +116,12 @@ with tab2:
 
     # ---------------- BOOK ----------------
     if action == "Book Appointment":
-        name = st.text_input("Enter your name")
+        st.caption("Fields marked with * are mandatory")
+
+        name = st.text_input("Enter your name *")
 
         selected_date = st.date_input(
-            "Select date",
+            "Select date *",
             value=None,
             min_value=date.today()
         )
@@ -118,7 +130,12 @@ with tab2:
 
         if selected_date is not None:
             now = datetime.now()
-            booked_slots = get_booked_slots()
+            appointments = list_direct()
+
+            booked_slots = [
+                datetime.strptime(a["time"], "%Y-%m-%d %H:%M:%S")
+                for a in appointments
+            ]
 
             time_options = []
 
@@ -138,83 +155,78 @@ with tab2:
                 st.error("❌ No available slots for this day.")
             else:
                 selected_time = st.selectbox(
-                    "Select time",
+                    "Select time *",
                     ["-- Select Time --"] + time_options
                 )
 
-        if st.button("Confirm Booking"):
-            if not name:
-                st.warning("Please enter your name")
-            elif selected_date is None:
-                st.warning("Please select a date")
-            elif selected_time == "-- Select Time --" or selected_time is None:
-                st.warning("Please select a time")
+        # Inline validation hints
+        if not name:
+            st.caption("⚠️ Please enter your name")
+        if selected_date is None:
+            st.caption("⚠️ Please select a date")
+        if selected_time in [None, "-- Select Time --"]:
+            st.caption("⚠️ Please select a time")
+
+        is_valid = (
+            name and
+            selected_date is not None and
+            selected_time not in [None, "-- Select Time --"]
+        )
+
+        if st.button("Confirm Booking", disabled=not is_valid):
+            response = book_direct(selected_date, selected_time, name)
+
+            if "error" in response.lower():
+                st.error(response)
             else:
-                response = book_direct(selected_date, selected_time, name)
                 st.success(response)
 
     # ---------------- CANCEL ----------------
     elif action == "Cancel Appointment":
-        st.info("Please select the date and time of the appointment you want to cancel.")
+        st.caption("Select an appointment to cancel *")
 
-        # Session state for confirmation flow
-        if "confirm_cancel" not in st.session_state:
-            st.session_state.confirm_cancel = False
+        appointments = list_direct()
 
-        if "cancel_payload" not in st.session_state:
-            st.session_state.cancel_payload = None
+        if not appointments:
+            st.warning("No appointments to cancel.")
+        else:
+            options = [
+                f"{a['client_name']} at {a['time']}"
+                for a in appointments
+            ]
 
-        cancel_date = st.date_input(
-            "Cancel date",
-            value=None,
-            min_value=date.today()
-        )
+            selected = st.selectbox("Choose appointment *", options)
 
-        cancel_time = st.selectbox(
-            "Cancel time",
-            ["-- Select Time --"] + [time(h, m) for h in range(24) for m in (0, 30)]
-        )
+            is_valid = selected is not None
 
-        # Step 1: User clicks cancel → store selection + trigger confirmation UI
-        if st.button("Cancel Appointment"):
-            if cancel_date is None:
-                st.warning("Please select a date")
-            elif cancel_time == "-- Select Time --":
-                st.warning("Please select a time")
-            else:
-                st.session_state.confirm_cancel = True
-                st.session_state.cancel_payload = (cancel_date, cancel_time)
+            if st.button("Cancel Appointment", disabled=not is_valid):
+                idx = options.index(selected)
+                appt_id = appointments[idx]["id"]
 
-        # Step 2: Show confirmation UI (popup-like)
-        if st.session_state.confirm_cancel:
-            st.warning("⚠️ Are you sure you want to cancel this appointment?")
+                response = cancel_direct_by_id(appt_id)
 
-            col1, col2 = st.columns(2)
-
-            with col1:
-                if st.button("Yes, Cancel"):
-                    date_val, time_val = st.session_state.cancel_payload
-                    response = cancel_direct(date_val, time_val)
-
+                if "error" in response.lower():
+                    st.error(response)
+                else:
                     st.success(response)
 
-                    # Reset state
-                    st.session_state.confirm_cancel = False
-                    st.session_state.cancel_payload = None
-
-            with col2:
-                if st.button("No"):
-                    st.session_state.confirm_cancel = False
-                    st.session_state.cancel_payload = None
-
-    # ---------------- NEXT SLOT ----------------
+    # ---------------- NEXT ----------------
     elif action == "Next Available Slot":
         if st.button("Get Next Slot"):
             response = next_direct()
-            st.info(response)
+
+            if "error" in response.lower():
+                st.error(response)
+            else:
+                st.info(response)
 
     # ---------------- LIST ----------------
     elif action == "List Appointments":
         if st.button("Show Appointments"):
-            response = list_direct()
-            st.write(response)
+            appointments = list_direct()
+
+            if not appointments:
+                st.info("No appointments found.")
+            else:
+                for a in appointments:
+                    st.write(f"• {a['client_name']} at {a['time']}")
