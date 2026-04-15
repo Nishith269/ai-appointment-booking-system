@@ -12,7 +12,7 @@ if "thread_id" not in st.session_state:
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
-API_BASE = "http://127.0.0.1:8000"
+API_BASE = "https://smart-appointment-assistant.onrender.com"
 
 # -----------------------------
 # Page Config
