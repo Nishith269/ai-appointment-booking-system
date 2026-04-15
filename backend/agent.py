@@ -2,7 +2,9 @@ import os
 import datetime
 from dotenv import load_dotenv
 import logging
+from zoneinfo import ZoneInfo
 
+        
 
 # LLM
 from langchain_openai import AzureChatOpenAI
@@ -64,6 +66,7 @@ all_tools = caller_tools1 + caller_tools2
 tool_node1 = ToolNode(caller_tools1)
 tool_node2 = ToolNode(caller_tools2)
 
+IST = ZoneInfo("Asia/Kolkata")
 
 # 🧠 Prompt for the agent
 
@@ -122,6 +125,16 @@ CONFIRMATION RULE
 
 -------------------------
 
+-------------------------
+TIMEZONE RULE (VERY IMPORTANT)
+-------------------------
+
+- All times are in IST (Indian Standard Time).
+- ALWAYS include "IST" explicitly in every time you mention.
+- NEVER remove or omit "IST" from tool responses.
+- If a time is given, format like:
+  15th April 2026 at 10:30 PM IST
+
 Current time: {current_time}
 """
 
@@ -145,7 +158,7 @@ def chatbot(state: MessagesState):
     - Returns updated messages
     """
     try:
-        state["current_time"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+        state["current_time"] = datetime.datetime.now(IST).strftime("%d %b %Y, %I:%M %p IST")
         response = caller_model.invoke(state)
         logger.info("LLM responded")
         return {"messages": [response]}

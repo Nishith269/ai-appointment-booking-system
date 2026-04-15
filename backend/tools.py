@@ -1,8 +1,12 @@
-import datetime
 import logging
 from langchain_core.tools import tool
 from database import SessionLocal
 from models import Appointment
+
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
+IST = ZoneInfo("Asia/Kolkata")
 
 logger = logging.getLogger("appointment_app")
 
@@ -12,23 +16,25 @@ def get_next_appointment():
     """Returns the next available unbooked 30-minute slot."""
     db = SessionLocal()
     try:
-        now = datetime.datetime.now()
+        now = datetime.now(IST).replace(tzinfo=None)
 
         minutes = (30 - now.minute % 30) % 30
         if minutes == 0:
             minutes = 30
 
-        next_slot = now + datetime.timedelta(minutes=minutes)
+        next_slot = now + timedelta(minutes=minutes)
         next_slot = next_slot.replace(second=0, microsecond=0)
 
         while True:
             exists = db.query(Appointment).filter(Appointment.time == next_slot).first()
             if not exists:
                 break
-            next_slot += datetime.timedelta(minutes=30)
+            next_slot += timedelta(minutes=30)
 
-        logger.info(f"Next available slot: {next_slot}")
-        return f"The next available appointment is at {next_slot}"
+        formatted = next_slot.strftime("%d %b %Y, %I:%M %p IST")
+
+        logger.info(f"Next available slot: {formatted}")
+        return f"The next available appointment is at {formatted}"
 
     except Exception as e:
         logger.error(f"Error in get_next_appointment: {str(e)}", exc_info=True)
@@ -53,8 +59,9 @@ def book_appointment(year=None, month=None, day=None, hour=None, minute=None, cl
         if hour is None or minute is None:
             return "Please provide time."
 
-        time = datetime.datetime(year, month, day, hour, minute)
-        now = datetime.datetime.now()
+
+        time = datetime(year, month, day, hour, minute)
+        now = datetime.now(IST).replace(tzinfo=None)
 
         if time < now:
             return "Cannot book past appointments."
@@ -64,14 +71,17 @@ def book_appointment(year=None, month=None, day=None, hour=None, minute=None, cl
 
         existing = db.query(Appointment).filter(Appointment.time == time).first()
         if existing:
-            return f"Slot {time} already booked."
+            formatted = time.strftime("%d %b %Y, %I:%M %p IST")
+            return f"Slot {formatted} already booked."
 
         new_appointment = Appointment(client_name=client_name, time=time)
         db.add(new_appointment)
         db.commit()
 
-        logger.info(f"Booked appointment for {client_name} at {time}")
-        return f"Booked for {time}"
+        formatted = time.strftime("%d %b %Y, %I:%M %p IST")
+
+        logger.info(f"Booked appointment for {client_name} at {formatted}")
+        return f"Booked for {formatted}"
 
     except Exception as e:
         logger.error(f"Booking error: {str(e)}", exc_info=True)
@@ -93,11 +103,12 @@ def cancel_appointment(id: int = None, index: int = None, year=None, month=None,
             if not appt:
                 return "Appointment not found."
 
+            formatted = appt.time.strftime("%d %b %Y, %I:%M %p IST")
             db.delete(appt)
             db.commit()
 
             logger.info(f"Cancelled appointment ID {id}")
-            return f"Cancelled {appt.time}"
+            return f"Cancelled {formatted}"
 
         appointments = db.query(Appointment).order_by(Appointment.time).all()
 
@@ -106,22 +117,26 @@ def cancel_appointment(id: int = None, index: int = None, year=None, month=None,
                 return "Invalid selection."
 
             appt = appointments[index - 1]
+            formatted = appt.time.strftime("%d %b %Y, %I:%M %p IST")
+
             db.delete(appt)
             db.commit()
 
-            return f"Cancelled {appt.time}"
+            return f"Cancelled {formatted}"
 
         if all([year, month, day, hour, minute]):
-            time = datetime.datetime(year, month, day, hour, minute)
+            time = datetime(year, month, day, hour, minute)
             appt = db.query(Appointment).filter(Appointment.time == time).first()
 
             if not appt:
                 return "No matching appointment."
 
+            formatted = time.strftime("%d %b %Y, %I:%M %p IST")
+
             db.delete(appt)
             db.commit()
 
-            return f"Cancelled {time}"
+            return f"Cancelled {formatted}"
 
         return "Provide id, index, or datetime"
 
@@ -148,7 +163,7 @@ def list_appointments():
             {
                 "id": a.id,
                 "client_name": a.client_name,
-                "time": a.time.strftime("%Y-%m-%d %H:%M:%S")
+                "time": a.time.strftime("%d %b %Y, %I:%M %p IST")
             }
             for a in appointments
         ]

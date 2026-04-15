@@ -1,6 +1,8 @@
 from sqlalchemy import Column, Integer, String, DateTime
 from database import Base
 
+# All times are stored as naive IST (no timezone)
+
 class Appointment(Base):
     __tablename__ = "appointments"
 

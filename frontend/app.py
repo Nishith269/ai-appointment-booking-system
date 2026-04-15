@@ -2,6 +2,8 @@ import streamlit as st
 import requests
 from datetime import datetime, date, time
 import uuid
+from zoneinfo import ZoneInfo
+IST = ZoneInfo("Asia/Kolkata")
 
 # -----------------------------
 # Session Setup
@@ -35,6 +37,12 @@ st.markdown(
     unsafe_allow_html=True
 )
 
+current_time = datetime.now(IST).strftime("%d %b %Y, %I:%M %p IST")
+st.markdown(
+    f"<div style='text-align:right; font-size:12px; color:gray;'>🕒 {current_time}</div>",
+    unsafe_allow_html=True
+)
+
 st.markdown("---")
 
 # -----------------------------
@@ -43,8 +51,9 @@ st.markdown("---")
 st.sidebar.markdown("## 🧭 Navigation")
 
 page = st.sidebar.radio(
-    "",
-    ["💬 AI Assistant", "⚙️ Actions"]
+    "Navigation",
+    ["💬 AI Assistant", "⚙️ Actions"],
+    label_visibility="collapsed"
 )
 
 
@@ -182,11 +191,11 @@ elif page == "⚙️ Actions":
         selected_time = None
 
         if selected_date is not None:
-            now = datetime.now()
+            now = datetime.now(IST).replace(tzinfo=None)
             appointments = list_direct()
 
             booked_slots = [
-                datetime.strptime(a["time"], "%Y-%m-%d %H:%M:%S")
+                datetime.strptime(a["time"].replace(" IST", ""), "%d %b %Y, %I:%M %p")
                 for a in appointments
             ]
 
