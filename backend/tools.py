@@ -46,12 +46,15 @@ def get_next_appointment():
 
 # ---------------- BOOK ----------------
 @tool
-def book_appointment(year=None, month=None, day=None, hour=None, minute=None, client_name=None):
+def book_appointment(year=None, month=None, day=None, hour=None, minute=None, client_name=None, email=None):
     """Books an appointment if the slot is available."""
     db = SessionLocal()
     try:
         if not client_name:
             return "Please provide your name."
+        
+        if not email:
+            return "Please provide your email."
 
         if not all([year, month, day]):
             return "Please provide the date."
@@ -74,13 +77,14 @@ def book_appointment(year=None, month=None, day=None, hour=None, minute=None, cl
             formatted = time.strftime("%d %b %Y, %I:%M %p IST")
             return f"Slot {formatted} already booked."
 
-        new_appointment = Appointment(client_name=client_name, time=time)
+        new_appointment = Appointment(client_name=client_name,
+            email=email, time=time)
         db.add(new_appointment)
         db.commit()
 
         formatted = time.strftime("%d %b %Y, %I:%M %p IST")
 
-        logger.info(f"Booked appointment for {client_name} at {formatted}")
+        logger.info(f"Booked appointment for {client_name} ({email}) at {formatted}")
         return f"Booked for {formatted}"
 
     except Exception as e:
@@ -104,11 +108,17 @@ def cancel_appointment(id: int = None, index: int = None, year=None, month=None,
                 return "Appointment not found."
 
             formatted = appt.time.strftime("%d %b %Y, %I:%M %p IST")
+            email = appt.email
+
             db.delete(appt)
             db.commit()
 
             logger.info(f"Cancelled appointment ID {id}")
-            return f"Cancelled {formatted}"
+            return {
+                "message": f"Cancelled {formatted}",
+                "email": email,
+                "time": formatted
+            }
 
         appointments = db.query(Appointment).order_by(Appointment.time).all()
 
@@ -118,11 +128,16 @@ def cancel_appointment(id: int = None, index: int = None, year=None, month=None,
 
             appt = appointments[index - 1]
             formatted = appt.time.strftime("%d %b %Y, %I:%M %p IST")
-
+            email = appt.email
+            
             db.delete(appt)
             db.commit()
 
-            return f"Cancelled {formatted}"
+            return {
+                "message": f"Cancelled {formatted}",
+                "email": email,
+                "time": formatted
+            }
 
         if all([year, month, day, hour, minute]):
             time = datetime(year, month, day, hour, minute)
@@ -132,11 +147,16 @@ def cancel_appointment(id: int = None, index: int = None, year=None, month=None,
                 return "No matching appointment."
 
             formatted = time.strftime("%d %b %Y, %I:%M %p IST")
+            email = appt.email
 
             db.delete(appt)
             db.commit()
 
-            return f"Cancelled {formatted}"
+            return {
+                "message": f"Cancelled {formatted}",
+                "email": email,
+                "time": formatted
+            }
 
         return "Provide id, index, or datetime"
 
@@ -163,6 +183,7 @@ def list_appointments():
             {
                 "id": a.id,
                 "client_name": a.client_name,
+                "email": a.email,
                 "time": a.time.strftime("%d %b %Y, %I:%M %p IST")
             }
             for a in appointments

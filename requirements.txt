@@ -9,3 +9,4 @@ langchain-openai
 python-dotenv
 pydantic
 sqlalchemy
+email-validator

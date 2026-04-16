@@ -8,4 +8,5 @@ class Appointment(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     client_name = Column(String, nullable=False)
+    email = Column(String, nullable=False, index=True) 
     time = Column(DateTime, nullable=False)

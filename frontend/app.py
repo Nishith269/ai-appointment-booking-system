@@ -1,5 +1,6 @@
 import streamlit as st
 import requests
+import re
 from datetime import datetime, date, time
 import uuid
 from zoneinfo import ZoneInfo
@@ -92,11 +93,12 @@ def send_query(query):
 # -----------------------------
 # Direct APIs
 # -----------------------------
-def book_direct(date_val, time_val, name):
+def book_direct(date_val, time_val, name, email):
     data = safe_post(f"{API_BASE}/book", {
         "date": str(date_val),
         "time": str(time_val),
-        "name": name
+        "name": name,
+        "email": email
     })
     return data.get("response", "Error") if data else "Error"
 
@@ -117,6 +119,32 @@ def next_direct():
     data = safe_post(f"{API_BASE}/next")
     return data.get("response", "Error") if data else "Error"
 
+
+def is_valid_email(email):
+    return re.match(r"[^@]+@[^@]+\.[^@]+", email)
+
+def handle_response(response):
+    #  dict response 
+    if isinstance(response, dict):
+        message = response.get("message", "")
+        email = response.get("email", "")
+        time = response.get("time", "")
+
+        if "error" in message.lower():
+            st.error(message)
+        else:
+            st.success(f"✅ {message}")
+            
+            if time:
+                st.write(f"📅 {time}")
+            if email:
+                st.write(f"📧 {email}")
+
+    else:
+        if "error" in response.lower():
+            st.error(response)
+        else:
+            st.success(response)
 
 # =============================
 # 💬 AI CHAT
@@ -181,6 +209,9 @@ elif page == "⚙️ Actions":
         st.caption("Fields marked with * are mandatory")
 
         name = st.text_input("Enter your name *")
+        email = st.text_input("Enter your email *")
+
+        email_valid = is_valid_email(email) if email else False
 
         selected_date = st.date_input(
             "Select date *",
@@ -223,6 +254,10 @@ elif page == "⚙️ Actions":
 
         if not name:
             st.caption("⚠️ Please enter your name")
+        if not email:
+            st.caption("⚠️ Please enter your email")
+        elif not email_valid:
+            st.caption("⚠️ Enter a valid email address")
         if selected_date is None:
             st.caption("⚠️ Please select a date")
         if selected_time in [None, "-- Select Time --"]:
@@ -230,17 +265,14 @@ elif page == "⚙️ Actions":
 
         is_valid = (
             name and
+            email_valid and
             selected_date is not None and
             selected_time not in [None, "-- Select Time --"]
         )
 
         if st.button("✅ Confirm Booking", disabled=not is_valid):
-            response = book_direct(selected_date, selected_time, name)
-
-            if "error" in response.lower():
-                st.error(response)
-            else:
-                st.success(response)
+            response = book_direct(selected_date, selected_time, name, email)
+            handle_response(response)
 
     # ---------------- CANCEL ----------------
     elif action == "Cancel Appointment":
@@ -265,21 +297,13 @@ elif page == "⚙️ Actions":
                 appt_id = appointments[idx]["id"]
 
                 response = cancel_direct_by_id(appt_id)
-
-                if "error" in response.lower():
-                    st.error(response)
-                else:
-                    st.success(response)
+                handle_response(response)
 
     # ---------------- NEXT ----------------
     elif action == "Next Available Slot":
         if st.button("🔍 Find Next Available Slot"):
             response = next_direct()
-
-            if "error" in response.lower():
-                st.error(response)
-            else:
-                st.info(response)
+            handle_response(response)
 
     # ---------------- LIST ----------------
     elif action == "List Appointments":

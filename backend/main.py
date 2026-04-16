@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 import datetime
 
 from agent import caller_app
@@ -53,6 +53,7 @@ class BookRequest(BaseModel):
     date: str
     time: str
     name: str
+    email: EmailStr   
 
 @app.post("/book")
 def book(data: BookRequest):
@@ -65,7 +66,8 @@ def book(data: BookRequest):
             "day": dt.day,
             "hour": dt.hour,
             "minute": dt.minute,
-            "client_name": data.name
+            "client_name": data.name,
+            "email": data.email
         })
 
         return {"response": response}
