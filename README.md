@@ -115,10 +115,8 @@ streamlit run app.py
 
 ## 🔮 Future Enhancements
 
-* User authentication 
+* Google authentication 
 * Google Calendar integration
-* Email/SMS reminders
-* Cloud deployment 
 
 
 ## 📌 Key Highlights
