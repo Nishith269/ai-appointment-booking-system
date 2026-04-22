@@ -2,6 +2,7 @@ import logging
 from langchain_core.tools import tool
 from database import SessionLocal
 from models import Appointment
+from email_service import send_email
 
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -83,6 +84,13 @@ def book_appointment(year=None, month=None, day=None, hour=None, minute=None, cl
         db.commit()
 
         formatted = time.strftime("%d %b %Y, %I:%M %p IST")
+        
+        # ✅ SEND EMAIL
+        send_email(
+            email,
+            "Appointment Confirmed",
+            f"Hi {client_name},\n\nYour appointment is confirmed for {formatted}.\n\nThanks!"
+        )
 
         logger.info(f"Booked appointment for {client_name} ({email}) at {formatted}")
         return f"Booked for {formatted}"
@@ -113,6 +121,13 @@ def cancel_appointment(id: int = None, index: int = None, year=None, month=None,
             db.delete(appt)
             db.commit()
 
+            # ✅ SEND EMAIL
+            send_email(
+                email,
+                "Appointment Cancelled",
+                f"Your appointment scheduled at {formatted} has been cancelled."
+            )
+
             logger.info(f"Cancelled appointment ID {id}")
             return {
                 "message": f"Cancelled {formatted}",
@@ -133,6 +148,13 @@ def cancel_appointment(id: int = None, index: int = None, year=None, month=None,
             db.delete(appt)
             db.commit()
 
+            # ✅ SEND EMAIL
+            send_email(
+                email,
+                "Appointment Cancelled",
+                f"Your appointment scheduled at {formatted} has been cancelled."
+            )
+
             return {
                 "message": f"Cancelled {formatted}",
                 "email": email,
@@ -151,6 +173,13 @@ def cancel_appointment(id: int = None, index: int = None, year=None, month=None,
 
             db.delete(appt)
             db.commit()
+
+            # ✅ SEND EMAIL
+            send_email(
+                email,
+                "Appointment Cancelled",
+                f"Your appointment scheduled at {formatted} has been cancelled."
+            )
 
             return {
                 "message": f"Cancelled {formatted}",

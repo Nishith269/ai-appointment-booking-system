@@ -55,6 +55,25 @@ SQLite Database (SQLAlchemy ORM)
 * **Database:** SQLite (SQLAlchemy ORM)
 * **Language:** Python
 
+## 📧 Email Notifications (Optional)
+
+The system supports automatic email notifications for:
+
+- ✅ Appointment confirmation (on booking)
+- ❌ Appointment cancellation
+
+Emails are sent using SMTP (Gmail App Password-based authentication).
+
+### 🔒 Privacy Note
+
+For security and privacy reasons, email functionality is **disabled by default**.
+
+To enable it, configure the following environment variables:
+
+EMAIL_USER=your_email@gmail.com  
+EMAIL_PASS=your_app_password  
+
+If these are not provided, the system will skip sending emails without affecting core functionality.
 
 
 ## ⚙️ Setup Instructions
