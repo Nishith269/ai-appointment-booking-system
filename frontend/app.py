@@ -46,6 +46,8 @@ st.markdown(
 
 st.markdown("---")
 
+st.info("⚡ Initial request may take a few seconds due to backend startup (free-tier hosting).")
+
 # -----------------------------
 # Sidebar Navigation
 # -----------------------------

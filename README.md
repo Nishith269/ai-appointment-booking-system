@@ -112,6 +112,11 @@ uvicorn main:app --reload
 cd frontend
 streamlit run app.py
 
+### ⚠️ Note on Deployment
+
+This project is deployed using free-tier services (Streamlit Cloud and Render).
+
+Initial requests may take a few seconds to respond due to cold start behavior. Subsequent interactions are fast and responsive.
 
 ## 🔮 Future Enhancements
 
